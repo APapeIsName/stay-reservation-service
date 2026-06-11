@@ -17,6 +17,7 @@ import org.mockito.kotlin.whenever
 import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
+import org.junit.jupiter.api.Tag
 
 /**
  * 카탈로그: docs/round-1/02-tdd-plan.md  B.10 UserService (unit-level)
@@ -24,6 +25,7 @@ import java.time.ZoneId
  * 본 테스트는 `UserService.signUp` 의 오케스트레이션 흐름을 mock repository 로 검증한다.
  * 실제 DB 영속·동시성·트랜잭션 롤백은 Step 6 통합 테스트(Testcontainers) 에서.
  */
+@Tag("slow-unit")
 class UserServiceTest {
 
     companion object {

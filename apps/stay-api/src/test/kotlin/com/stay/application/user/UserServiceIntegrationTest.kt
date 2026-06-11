@@ -15,6 +15,7 @@ import org.junit.jupiter.api.assertThrows
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
+import org.junit.jupiter.api.Tag
 
 /**
  * 카탈로그: docs/round-1/02-tdd-plan.md  B.10 UserService Integration
@@ -24,6 +25,7 @@ import org.springframework.context.annotation.Import
  */
 @SpringBootTest
 @Import(MySqlTestContainersConfig::class)
+@Tag("integration")
 class UserServiceIntegrationTest
     @Autowired
     constructor(

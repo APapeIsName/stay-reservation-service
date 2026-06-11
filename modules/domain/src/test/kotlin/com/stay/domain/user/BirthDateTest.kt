@@ -8,11 +8,13 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import java.time.LocalDate
+import org.junit.jupiter.api.Tag
 
 /**
  * 카탈로그: docs/round-1/02-tdd-plan.md  B.5 BirthDate VO
  * 규칙: yyyy-MM-dd 포맷 / 미래 불가 / 만 14세 이상 (today 외부 주입)
  */
+@Tag("unit")
 class BirthDateTest {
 
     companion object {

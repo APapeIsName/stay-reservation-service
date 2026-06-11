@@ -18,6 +18,7 @@ import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
+import org.junit.jupiter.api.Tag
 
 /**
  * 카탈로그: docs/round-1/02-tdd-plan.md  B.11 UserV1Controller E2E
@@ -26,6 +27,7 @@ import org.springframework.http.HttpStatus
  */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 @Import(MySqlTestContainersConfig::class)
+@Tag("e2e")
 class UserV1ApiE2ETest
     @Autowired
     constructor(

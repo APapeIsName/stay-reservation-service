@@ -7,11 +7,13 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import org.junit.jupiter.api.Tag
 
 /**
  * 카탈로그: docs/round-1/02-tdd-plan.md  B.7 PhoneNumber VO
  * 규칙: ^010-\d{4}-\d{4}$
  */
+@Tag("unit")
 class PhoneNumberTest {
 
     @Nested
