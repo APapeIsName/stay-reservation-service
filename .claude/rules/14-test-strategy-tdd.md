@@ -16,14 +16,14 @@
 ### 계층
 | 계층 | 위치 | 환경 | 대상 |
 |---|---|---|---|
-| Unit | `apps/stay-api/src/test/kotlin/com/stay/domain/**/*Test.kt` | JUnit5 + Mockito (Spring X) | VO, Aggregate |
-| Integration | `.../application/**/*IntegrationTest.kt` | `@SpringBootTest` + Testcontainers MySQL | Service, Repository |
+| Unit | `modules/domain/src/test/kotlin/com/stay/domain/**/*Test.kt` (도메인 코드와 같은 모듈 — Q7 이동 반영) | JUnit5 (Spring X) | VO, Aggregate, Domain Service |
+| Integration | `apps/stay-api/src/test/.../application/**/*IntegrationTest.kt`, `.../infrastructure/**/*IntegrationTest.kt` | `@SpringBootTest` + Testcontainers MySQL | Service, Repository 어댑터 |
 | E2E | `.../interfaces/api/**/*E2ETest.kt` | `@SpringBootTest(RANDOM_PORT)` + `TestRestTemplate` | Controller |
 
-### TDD 사이클
-1. **Red**: 실패하는 테스트 작성. 카탈로그 ID 를 `@DisplayName("<CATALOG-ID> ...")` 으로 노출 (e.g., `LID-01`)
-2. **Green**: 통과시키는 **최소 구현**
-3. **Refactor**: 중복/네이밍/응집 정리. 다음 사이클 진입 전 **전체 기존 테스트 회귀 통과** 확인
+### TDD 사이클 — 단계별 목적 (2026-06-10 사용자 정의, round-3 Q1)
+1. **Red — "어떤 걸 검증할 것인가"**: 명세(요구사항·LLD·카탈로그) 기반으로 실패하는 테스트 작성. 테스트가 명세의 실행 가능한 표현이 되게 한다. 카탈로그 ID 를 `@DisplayName("<CATALOG-ID> ...")` 으로 노출 (e.g., `LID-01`)
+2. **Green — 테스트 ↔ 프로덕션 일치 증명**: 테스트 작성과 **분리된 구현 에이전트**가 *테스트 코드와 명세만* 보고 통과시키는 **최소 구현**. 작성자·구현자 분리로 "테스트가 명세를 대변한다"는 증명이 성립한다. 구현 결과는 [검수 게이트](./05-code-review-gate.md) 대로 chat 제안 → 승인 → Write
+3. **Refactor — 객체지향 재구성**: Green 의 "성공만을 위한" 코드를 되돌아보며 객체지향(하는 것/아는 것 분리, 역할·책임·경계·협력 기반 객체)으로 정리. **변경 한 번마다 테스트를 지속 실행**하는 것이 원칙. 다음 사이클 진입 전 **전체 기존 테스트 회귀 통과** 확인
 
 ### 검증 명령
 - 단위 테스트만 빠르게: `./gradlew :apps:stay-api:test --tests "com.stay.domain.*"`

@@ -31,13 +31,16 @@
 @.claude/rules/15-process-conventions.md
 @.claude/rules/16-user-convention-priority.md
 @.claude/rules/17-test-categorization.md
+@.claude/rules/18-domain-modeling.md
+@.claude/rules/19-layered-architecture-dip.md
+@.claude/rules/20-package-and-dto-strategy.md
 
 ## Round 작업 문서
 
 - `docs/curriculum/round-N.md` — 발제 원문 (동결, 수정 금지)
 - `docs/round-N/01-signup-requirements.md` 등 — 라운드별 작업 문서
 - `docs/round-N/03-questions.md` — Q&A 누적 (트레이드오프·결정·면접 답변 템플릿)
-- 현재: Round 1 (회원가입) 완료, PR #1 검토 대기
+- 현재: Round 3 + 후속 (JPA 영속·API 계층·@Tag 등급 실행) 완료 — L1/L2 246건 통과, L3 12 + L4 7 케이스는 작성 완료·Docker 환경 차단. 잔여: 동시 예약 race, S-12 목록 조회, 어드민 API
 
 ## 메모리
 
