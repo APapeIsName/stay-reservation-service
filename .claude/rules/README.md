@@ -14,7 +14,11 @@
 <채택 이유·트레이드오프>
 
 ## How to apply
-<구현/검토 시 따르는 법, 위반 신호>
+<구현/검토 시 따르는 절차>
+
+### 체크리스트 (✅ 위주의 긍정 검증 장치)
+- ✅ ...
+- ✅ ...
 
 ## References
 <출처 문서/결정 ID>
@@ -37,7 +41,10 @@
 | 11 | `11-password-policy.md` | 비밀번호 정책 (charset · BCrypt · YYYYMMDD) |
 | 12 | `12-user-field-policy.md` | 회원 필드 정규식 모음 |
 | 13 | `13-signup-response-no-masking.md` | 가입 응답 마스킹 미적용 |
-| 14 | `14-test-strategy-tdd.md` | 테스트 전략 + TDD Red→Green→Refactor |
+| 14 | `14-test-strategy-tdd.md` | 테스트 전략 + TDD Red→Green→Refactor + 환경 이슈 분류 |
+| 15 | `15-process-conventions.md` | 진행 컨벤션 (승인 신호·사이클·questions.md·deferred) |
+| 16 | `16-user-convention-priority.md` | 사용자 컨벤션 우선 (일괄 리네이밍 절차) |
+| 17 | `17-test-categorization.md` | 테스트 4단계 분류 (L1\~L4 + `@Tag`) |
 
 ## 갱신 규칙
 - 새 결정 → 해당 파일 갱신 또는 신규 파일 + `CLAUDE.md` `@-import` 1줄 추가

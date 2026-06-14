@@ -29,12 +29,24 @@
 - 단위 테스트만 빠르게: `./gradlew :apps:stay-api:test --tests "com.stay.domain.*"`
 - 컴파일+lint+assemble (Docker 불요): `./gradlew clean ktlintCheck build -x test`
 - 전체 (Docker 필요): `./gradlew build` — 환경에 따라 Testcontainers 컨텍스트 테스트가 실패할 수 있음 (코드 회귀 아닐 가능성 인지)
+- 등급별 실행: [`17-test-categorization.md`](./17-test-categorization.md) 의 `-DtestTag=...` 옵션 참조
 
 ### 카탈로그
 - 각 라운드 `docs/round-N/02-tdd-plan.md` Part B 에 (ID · Given · When · Then) 표
 - 테스트 클래스/메서드는 카탈로그 ID 를 `@DisplayName` 으로 노출 → 역추적성 확보
 
+### 환경 이슈 vs 코드 회귀 구분
+
+테스트 실패 시 다음 체크리스트로 분류한다:
+
+- ✅ 실패 메시지가 `DockerClientProviderStrategy` 또는 `Could not find a valid Docker environment` 를 포함하면 → **환경 의존 실패** (메모리 `testcontainers-docker-desktop-incompat` 참조)
+- ✅ 실패 메시지가 `Unresolved reference`, `Compilation error` 면 → **코드 회귀**
+- ✅ 실패 메시지가 `AssertionError`, `expected: ... actual: ...` 면 → **코드 회귀**
+- ✅ 환경 의존 실패는 `./gradlew clean ktlintCheck build -x test` + 단위테스트 통과 시 *"코드 회귀 아님"* 으로 보고에 명시
+- ✅ 보고는 *어떤 등급은 통과 / 어떤 등급은 환경 차단* 으로 분리해 표시 ([`17-test-categorization.md`](./17-test-categorization.md) 의 L1\~L4 활용)
+
 ## References
 - 발제: `docs/curriculum/round-1.md` "테스트 피라미드", "TDD"
 - 계획: `docs/round-1/02-tdd-plan.md` Part B (카탈로그), Part C (사이클 순서)
 - 환경 제약: 메모리 `testcontainers-docker-desktop-incompat`
+- 분류 시스템: [`17-test-categorization.md`](./17-test-categorization.md)
