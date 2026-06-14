@@ -94,7 +94,10 @@ subprojects {
 
     tasks.test {
         maxParallelForks = 1
-        useJUnitPlatform()
+        // 등급별 실행 (rule 17): ./gradlew test -DtestTag=unit | "unit | slow-unit" | integration | e2e
+        useJUnitPlatform {
+            System.getProperty("testTag")?.let { includeTags(it) }
+        }
         systemProperty("user.timezone", "Asia/Seoul")
         systemProperty("spring.profiles.active", "test")
         jvmArgs("-Xshare:off")

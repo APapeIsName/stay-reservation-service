@@ -7,11 +7,13 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import org.junit.jupiter.api.Tag
 
 /**
  * 카탈로그: docs/round-1/02-tdd-plan.md  B.1 LoginId VO
  * 규칙: ^[A-Za-z0-9]{4,20}$  (docs/round-1/01-signup-requirements.md §2)
  */
+@Tag("unit")
 class LoginIdTest {
 
     @Nested

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
+import org.junit.jupiter.api.Tag
 
 /**
  * 카탈로그: docs/round-1/02-tdd-plan.md  B.3 Password VO
@@ -14,6 +15,7 @@ import java.time.LocalDate
  *  - matches 는 raw 와 hashedValue 의 BCrypt 매칭
  *  - 같은 raw·birthDate 라도 매 encrypt 결과 hashedValue 다름 (salt 무작위)
  */
+@Tag("slow-unit")
 class PasswordTest {
 
     companion object {

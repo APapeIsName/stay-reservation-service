@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import org.junit.jupiter.api.Tag
 
 /**
  * 카탈로그: docs/round-1/02-tdd-plan.md  B.2 RawPassword VO
@@ -14,6 +15,7 @@ import org.junit.jupiter.params.provider.ValueSource
  *       조합 강제 없음 (스펙 직역) — .claude/rules/11-password-policy.md
  *       생년월일 substring 검사는 Password VO (Cycle 7) 의 책임
  */
+@Tag("unit")
 class RawPasswordTest {
 
     @Nested

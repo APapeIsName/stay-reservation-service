@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
+import org.junit.jupiter.api.Tag
 
 /**
  * 카탈로그: docs/round-1/02-tdd-plan.md  B.8 User.signUp 합성 테스트
@@ -15,6 +16,7 @@ import java.time.LocalDate
  *  - 한 필드 위반 시 정확한 도메인 예외가 (해당 VO 에서) throw 되는지
  * 만 sanity check.
  */
+@Tag("slow-unit")
 class UserTest {
 
     companion object {

@@ -7,12 +7,14 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import org.junit.jupiter.api.Tag
 
 /**
  * 카탈로그: docs/round-1/02-tdd-plan.md  B.6 Email VO
  * 규칙: ^[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$
  * 정책: TLD 필수 (alen@example 거부)
  */
+@Tag("unit")
 class EmailTest {
 
     @Nested

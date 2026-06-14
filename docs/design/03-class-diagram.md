@@ -282,6 +282,24 @@ class DailyRoom(
 }
 ```
 
+### 3.5 StayAvailabilityService — Domain Service (Round 3 신설, Q3)
+
+기간(DateRange) × 다중 DailyRoom **컬렉션 수준** 협력 규칙의 단일 소유자. 무상태·Repository 무의존 — Round 1 D-A3 의 도입 기준 (단일 Aggregate 에 못 담는 규칙) 을 Round 3 에서 처음 충족.
+
+```kotlin
+class StayAvailabilityService {
+    fun validateAvailability(period: DateRange, dailyRooms: List<DailyRoom>)  // 기간 완전성 + 전 일자 canConsume — 위반 시 CONFLICT
+    fun isAvailable(period: DateRange, dailyRooms: List<DailyRoom>): Boolean  // 비예외 쌍둥이 — 검색·상세의 가용 필터용 (Q6)
+    fun quote(period: DateRange, dailyRooms: List<DailyRoom>): PriceSnapshot  // stayDates 순 정렬 견적 — 조회·예약 공용 (합산 단일 소유)
+    fun consumeAll(period: DateRange, dailyRooms: List<DailyRoom>)            // 선검증 후 전 일자 차감 — all-or-nothing
+    fun releaseAll(dailyRooms: List<DailyRoom>)                               // 대칭 복원 — 범위는 호출자 결정 (S-7 분리)
+}
+```
+
+- 개별 일자의 휴실·만실 규칙은 DailyRoom 메서드 위임 — 본 서비스는 컬렉션 수준만
+- 검색·상세·예약 3개 경로가 동일 가용·견적 규칙 재사용 (rule 18 §3 휴리스틱의 승격 사례)
+- 결정 기록: `docs/round-3/03-questions.md` Q3 (후보 6개 비교 포함)
+
 ---
 
 ## 4. Reservation Aggregate
@@ -319,11 +337,13 @@ classDiagram
         +refundAmount(now) Long
         +isCancellable() Boolean
         +belongsTo(userId) Boolean
+        +checkIn()
+        +checkOut()
     }
 
     class ReservationFactory {
         <<companion object>>
-        +confirm(userId, propertyId, roomTypeId, period, guestInfo, dailyRooms, property, now) Reservation
+        +confirm(userId, property, roomType, period, guestInfo, priceSnapshot, now) Reservation
     }
 
     class DateRange {
@@ -399,13 +419,15 @@ class Reservation private constructor(
     var cancelledAt: LocalDateTime?,
 ) {
     companion object {
+        // Round 3 정정 (Q3): dailyRooms 대신 PriceSnapshot 수취 — 타 Aggregate 객체 의존 제거.
+        // 견적 생성은 StayAvailabilityService.quote 책임 (§ 3.5)
         fun confirm(
             userId: Long,
             property: Property,
             roomType: RoomType,
             period: DateRange,
             guestInfo: GuestInfo,
-            dailyRooms: List<DailyRoom>,
+            priceSnapshot: PriceSnapshot,
             now: LocalDateTime,
         ): Reservation {
             if (!roomType.canAccommodate(guestInfo.guestCount)) {
@@ -414,7 +436,6 @@ class Reservation private constructor(
                     "최대 인원을 초과했습니다.",
                 )
             }
-            val priceSnapshot = PriceSnapshot(dailyRooms.map { DailyPriceEntry(it.date, it.pricePerNight) })
             return Reservation(
                 id = 0L,
                 userId = userId,
@@ -451,6 +472,11 @@ class Reservation private constructor(
         status in setOf(ReservationStatus.CONFIRMED, ReservationStatus.CHECKED_IN)
 
     fun belongsTo(userId: Long): Boolean = this.userId == userId
+
+    // Round 3 추가 (Q4): 상태 전이 메서드 — 테스트 픽스처가 var 대입으로 캡슐화를 깨야 했던 설계 신호의 해소
+    fun checkIn() { /* CONFIRMED 에서만 → CHECKED_IN, 위반 시 CONFLICT */ }
+
+    fun checkOut() { /* CHECKED_IN 에서만 → CHECKED_OUT, 위반 시 CONFLICT */ }
 }
 ```
 
@@ -639,6 +665,7 @@ data class SearchCriteria(
 |---|---|---|
 | 2026-05-30 | 첫 작성 (Round 2) | LLD 본체 — 4 Aggregate (Property/DailyRoom/Reservation/Wishlist) + Repository 포트 + 공통 enum/VO. C1\~C5 결정 (`docs/round-2/03-questions.md` Q5\~Q9 — 2026-05-31 누적 완료) 반영 |
 | 2026-05-30 | § 4.4 `Reservation.confirm()` 의 `require { }` → `if (!조건) throw CoreException(...)` 컨벤션 일치 | 검수 중 Round 1 의 `Password.kt` 패턴과 불일치 발견. Round 1 questions.md Q9 (Java-스러운 if-throw 체이닝, Kotlin best practice 모색 후 일괄 적용) 의 *현재 잠정 컨벤션* 따름 |
+| 2026-06-11 | Round 3 구현 반영 정정 — ① `confirm` 시그니처 `dailyRooms` → `priceSnapshot` 수취 (§ 4.2 다이어그램·§ 4.4 코드 — 기존 § 4.2/§ 4.4 간 불일치도 함께 해소) ② § 3.5 `StayAvailabilityService` 신설 ③ `checkIn()/checkOut()` 전이 메서드 추가 | 구현 결정 Q3 (SAS 확장 도입 — 타 Aggregate 객체 의존 제거)·Q4 (전이 메서드). 발견 경위는 `docs/round-3/02-tdd-plan.md` D-B2 |
 
 ---
 

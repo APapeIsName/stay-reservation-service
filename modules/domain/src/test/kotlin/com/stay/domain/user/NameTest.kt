@@ -7,11 +7,13 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import org.junit.jupiter.api.Tag
 
 /**
  * 카탈로그: docs/round-1/02-tdd-plan.md  B.4 Name VO
  * 규칙: ^[가-힣]{1,10}$  (한글 1~10자)
  */
+@Tag("unit")
 class NameTest {
 
     @Nested

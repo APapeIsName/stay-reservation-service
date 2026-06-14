@@ -45,6 +45,9 @@
 | 15 | `15-process-conventions.md` | 진행 컨벤션 (승인 신호·사이클·questions.md·deferred) |
 | 16 | `16-user-convention-priority.md` | 사용자 컨벤션 우선 (일괄 리네이밍 절차) |
 | 17 | `17-test-categorization.md` | 테스트 4단계 분류 (L1\~L4 + `@Tag`) |
+| 18 | `18-domain-modeling.md` | Entity/VO/Domain Service 분류 + 규칙 캡슐화 + Aggregate 경계 |
+| 19 | `19-layered-architecture-dip.md` | 4 레이어 책임 + DIP (port=domain, adapter=infra) |
+| 20 | `20-package-and-dto-strategy.md` | `com.stay.<layer>.<domain>` 패키지 + DTO 3계층 분리 |
 
 ## 갱신 규칙
 - 새 결정 → 해당 파일 갱신 또는 신규 파일 + `CLAUDE.md` `@-import` 1줄 추가
