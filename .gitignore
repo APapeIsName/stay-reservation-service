@@ -42,3 +42,7 @@ out/
 ### macOS ###
 .DS_Store
 **/.DS_Store
+
+### Bootcamp curriculum 발제 원문 (local-only — GitHub 미공개) ###
+# 부트캠프 발제 원문은 로컬에만 보관(동결, chmod 444). 내 작업 문서(docs/round-N, docs/design, docs/adr)는 계속 추적.
+docs/curriculum/
