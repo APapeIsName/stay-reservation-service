@@ -88,6 +88,7 @@
 | [ADR-001](./ADR-001-modules-domain-separation.md) | modules/domain 분리 | Accepted | Round 1 | 2026-05-22 | 모듈 경계 / 아키텍처 |
 | [ADR-002](./ADR-002-immediate-confirmed-reservation.md) | POST /reservations 즉시 CONFIRMED | Accepted | Round 2 | 2026-05-28 | 도메인 모델 / 상태 머신 |
 | [ADR-003](./ADR-003-single-daily-room-table.md) | 일자별 재고·요금 한 테이블 `daily_room` | Accepted | Round 2 | 2026-05-28 | 영속 구조 / 동시성 영역 |
+| [ADR-004](./ADR-004-lock-strategy.md) | 예약 트랜잭션 내 구간별 차등 락 전략 | Accepted | Round 4 | 2026-06-16 | 트랜잭션 모델 / 동시성 |
 
 ---
 
@@ -117,3 +118,4 @@
 | 날짜 | 변경 | 사유 |
 |---|---|---|
 | 2026-05-29 | 첫 작성 + ADR-001/002/003 신설 | 빅테크 HLD/LLD 리서치 결과 — *결정 (ADR) + 트레이드오프 산문* 의 가치 상승 (출처: `docs/round-2/05-hld-lld-research.md`) |
+| 2026-06-16 | ADR-004 신설 (구간별 차등 락 전략) | Round 4 동시성 결정 — 재고 비관락·쿠폰 낙관락·찜 원자적증가+유니크 (출처: `docs/round-4/03-questions.md` Q1~Q3) |
