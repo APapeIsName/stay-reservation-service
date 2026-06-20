@@ -21,8 +21,13 @@ import java.time.LocalDateTime
  *
  * 발급 시 만료 검사는 하지 않는다 (C-7 — 만료 거절은 사용 시점 CouponIssue.markUsed 책임).
  *
+ * myCoupons 흐름:
+ *  1. userId 로 발급분 전체 조회 (발급순) → page·size 페이지네이션 (drop/take, PropertyService 동형)
+ *  2. 발급분별 템플릿 조회 → 미존재 시 NOT_FOUND
+ *  3. `MyCouponInfo.from(issue, coupon, now)` 매핑 — status 는 now·expiredAt 비교로 EXPIRED 파생
+ *
  * Refs:
- *  - docs/round-4/02-tdd-plan.md B.4 CouponService.issue (CSVC-01~06)
+ *  - docs/round-4/02-tdd-plan.md B.4 CouponService.issue (CSVC-01~06), myCoupons (CSVC-07~11)
  *  - .claude/rules/08-static-factory-and-clock-injection.md (Clock 외부 주입)
  *  - .claude/rules/19-layered-architecture-dip.md (port 주입, 얇은 오케스트레이션)
  */
@@ -38,5 +43,18 @@ class CouponService(
             ?: throw CoreException(ErrorType.NOT_FOUND, "쿠폰을 찾을 수 없습니다.")
         val issue = CouponIssue.issue(command.couponId, command.userId, LocalDateTime.now(clock))
         return CouponInfo.from(couponIssueRepository.save(issue), coupon)
+    }
+
+    @Transactional(readOnly = true)
+    fun myCoupons(userId: Long, page: Int, size: Int): List<MyCouponInfo> {
+        val now = LocalDateTime.now(clock)
+        return couponIssueRepository.findByUserId(userId)
+            .drop(page * size)
+            .take(size)
+            .map { issue ->
+                val coupon = couponRepository.findById(issue.couponId)
+                    ?: throw CoreException(ErrorType.NOT_FOUND, "쿠폰을 찾을 수 없습니다.")
+                MyCouponInfo.from(issue, coupon, now)
+            }
     }
 }

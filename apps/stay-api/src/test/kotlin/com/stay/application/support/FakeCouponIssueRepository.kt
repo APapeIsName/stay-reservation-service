@@ -26,4 +26,6 @@ class FakeCouponIssueRepository : CouponIssueRepository {
         }
         return couponIssue
     }
+
+    override fun findByUserId(userId: Long): List<CouponIssue> = store.values.filter { it.userId == userId }
 }

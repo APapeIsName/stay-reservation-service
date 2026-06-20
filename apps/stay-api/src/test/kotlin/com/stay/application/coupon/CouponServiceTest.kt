@@ -130,4 +130,83 @@ class CouponServiceTest {
             assertThat(info.couponId).isEqualTo(10L)
         }
     }
+
+    @Nested
+    @DisplayName("내 쿠폰 목록 — myCoupons (상태 파생)")
+    inner class MyCoupons {
+
+        private val notExpired = LocalDateTime.parse("2026-12-31T23:59:00")
+        private val alreadyExpired = LocalDateTime.parse("2026-06-16T23:59:00")
+
+        private fun availableIssue(couponId: Long, userId: Long = 1L) =
+            CouponIssue.issue(couponId, userId, NOW)
+
+        private fun usedIssue(couponId: Long, userId: Long = 1L, usedAt: LocalDateTime = NOW) =
+            availableIssue(couponId, userId).apply { markUsed(usedAt, notExpired) }
+
+        @DisplayName("CSVC-07: AVAILABLE·USED·만료 3건 → status 파생 [AVAILABLE, USED, EXPIRED]")
+        @Test
+        fun derivesStatuses() {
+            val couponRepo = FakeCouponRepository().apply {
+                seed(1L, coupon(name = "C1", expiredAt = notExpired))
+                seed(2L, coupon(name = "C2", expiredAt = notExpired))
+                seed(3L, coupon(name = "C3", expiredAt = alreadyExpired))
+            }
+            val issueRepo = FakeCouponIssueRepository().apply {
+                save(availableIssue(1L))
+                save(usedIssue(2L))
+                save(availableIssue(3L))
+            }
+
+            val result = service(couponRepo, issueRepo).myCoupons(userId = 1L, page = 0, size = 10)
+
+            assertThat(result.map { it.status }).containsExactly("AVAILABLE", "USED", "EXPIRED")
+        }
+
+        @DisplayName("CSVC-08: 발급분 없는 유저 → 빈 목록")
+        @Test
+        fun emptyForUserWithNone() {
+            val result = service(FakeCouponRepository(), FakeCouponIssueRepository())
+                .myCoupons(userId = 2L, page = 0, size = 10)
+
+            assertThat(result).isEmpty()
+        }
+
+        @DisplayName("CSVC-09: AVAILABLE·만료 → EXPIRED 파생 (저장은 AVAILABLE, CIS-11 정합)")
+        @Test
+        fun expiredDerivation() {
+            val couponRepo = FakeCouponRepository().apply { seed(3L, coupon(expiredAt = alreadyExpired)) }
+            val issueRepo = FakeCouponIssueRepository().apply { save(availableIssue(3L)) }
+
+            val result = service(couponRepo, issueRepo).myCoupons(userId = 1L, page = 0, size = 10)
+
+            assertThat(result.single().status).isEqualTo("EXPIRED")
+        }
+
+        @DisplayName("CSVC-10: 5건 size=2 → page0 2 / page1 2 / page2 1 (마지막 초과 빈 목록)")
+        @Test
+        fun paginates() {
+            val couponRepo = FakeCouponRepository().apply { seed(1L, coupon()) }
+            val issueRepo = FakeCouponIssueRepository().apply { repeat(5) { save(availableIssue(1L)) } }
+            val sut = service(couponRepo, issueRepo)
+
+            assertThat(sut.myCoupons(1L, page = 0, size = 2)).hasSize(2)
+            assertThat(sut.myCoupons(1L, page = 1, size = 2)).hasSize(2)
+            assertThat(sut.myCoupons(1L, page = 2, size = 2)).hasSize(1)
+            assertThat(sut.myCoupons(1L, page = 3, size = 2)).isEmpty()
+        }
+
+        @DisplayName("CSVC-11: USED 는 만료 여부 무관 USED (USED 우선)")
+        @Test
+        fun usedTakesPrecedence() {
+            val couponRepo = FakeCouponRepository().apply { seed(2L, coupon(expiredAt = alreadyExpired)) }
+            val issueRepo = FakeCouponIssueRepository().apply {
+                save(usedIssue(2L, usedAt = LocalDateTime.parse("2026-05-01T10:00:00")))
+            }
+
+            val result = service(couponRepo, issueRepo).myCoupons(userId = 1L, page = 0, size = 10)
+
+            assertThat(result.single().status).isEqualTo("USED")
+        }
+    }
 }
