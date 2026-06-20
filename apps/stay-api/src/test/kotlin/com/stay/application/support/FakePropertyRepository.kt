@@ -24,4 +24,12 @@ class FakePropertyRepository : PropertyRepository {
         store[property.id] = property
         return property
     }
+
+    override fun incrementWishCount(id: Long) {
+        store[id]?.incrementWish()
+    }
+
+    override fun decrementWishCount(id: Long) {
+        store[id]?.decrementWish()
+    }
 }
