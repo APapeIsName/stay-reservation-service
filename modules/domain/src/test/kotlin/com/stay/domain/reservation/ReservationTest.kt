@@ -290,4 +290,73 @@ class ReservationTest {
             assertThat(sut.status).isEqualTo(ReservationStatus.CONFIRMED)
         }
     }
+
+    @Nested
+    @DisplayName("쿠폰 적용 — Round 4 (couponId + 할인 스냅샷)")
+    inner class CouponApplied {
+
+        private fun confirmWithCoupon(couponId: Long?, snapshot: PriceSnapshot) = Reservation.confirm(
+            userId = 1L,
+            property = property(),
+            roomType = roomType(),
+            couponId = couponId,
+            period = period,
+            guestInfo = GuestInfo(Name("공명선"), PhoneNumber("010-1234-5678"), 2),
+            priceSnapshot = snapshot,
+            now = now,
+        )
+
+        private val discounted = PriceSnapshot.of(
+            listOf(
+                DailyPriceEntry(LocalDate.parse("2026-07-01"), 100000L),
+                DailyPriceEntry(LocalDate.parse("2026-07-02"), 200000L),
+            ),
+            50000L,
+        )
+
+        @DisplayName("RSV2-07: couponId=null (미적용) → couponId null, totalPrice 300000, CONFIRMED")
+        @Test
+        fun noCoupon() {
+            val sut = confirmWithCoupon(couponId = null, snapshot = priceSnapshot)
+            assertThat(sut.couponId).isNull()
+            assertThat(sut.totalPrice).isEqualTo(300000L)
+            assertThat(sut.status).isEqualTo(ReservationStatus.CONFIRMED)
+        }
+
+        @DisplayName("RSV2-08: couponId=77 + 할인 50000 → couponId 77, totalPrice 250000 (finalPrice)")
+        @Test
+        fun withCoupon() {
+            val sut = confirmWithCoupon(couponId = 77L, snapshot = discounted)
+            assertThat(sut.couponId).isEqualTo(77L)
+            assertThat(sut.totalPrice).isEqualTo(250000L)
+            assertThat(sut.priceSnapshot.priceBeforeDiscount).isEqualTo(300000L)
+            assertThat(sut.priceSnapshot.discountAmount).isEqualTo(50000L)
+        }
+
+        @DisplayName("RSV2-09: 3금액 일관 — before - discount == final == totalPrice")
+        @Test
+        fun amountsConsistent() {
+            val sut = confirmWithCoupon(couponId = 77L, snapshot = discounted)
+            val ps = sut.priceSnapshot
+            assertThat(ps.priceBeforeDiscount - ps.discountAmount).isEqualTo(ps.finalPrice)
+            assertThat(ps.finalPrice).isEqualTo(sut.totalPrice)
+        }
+
+        @DisplayName("RSV2-10: 쿠폰 적용 예약 취소 — 환불은 finalPrice(250000) 기준 50% = 125000")
+        @Test
+        fun cancelRefundsOnFinalPrice() {
+            val sut = confirmWithCoupon(couponId = 77L, snapshot = discounted)
+            val result = sut.cancel(LocalDateTime.parse("2026-06-25T10:00"))
+            assertThat(sut.status).isEqualTo(ReservationStatus.CANCELLED)
+            assertThat(result.refundAmount).isEqualTo(125000L)
+        }
+
+        @DisplayName("RSV2-11: couponId=null 예약 취소도 기존 cancel 불변 (회귀)")
+        @Test
+        fun noCouponCancelRegression() {
+            val sut = confirmWithCoupon(couponId = null, snapshot = priceSnapshot)
+            val result = sut.cancel(LocalDateTime.parse("2026-06-25T10:00"))
+            assertThat(result.refundAmount).isEqualTo(150000L)
+        }
+    }
 }

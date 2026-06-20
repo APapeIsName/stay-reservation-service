@@ -19,19 +19,19 @@ import java.time.LocalDateTime
 /**
  * 예약 — Aggregate Root. 생성 = 즉시 CONFIRMED (ADR-002) — private 생성자 + 정적 팩토리 `confirm(...)` 만이 진입점.
  *  - confirm: roomType.canAccommodate(guestCount) 위반 시 CoreException(BAD_REQUEST) — 가드가 생성보다 먼저
- *  - 타 Aggregate (Property·RoomType) 는 팩토리 인자로만 사용하고 ID 만 보관 (객체 참조 금지)
+ *  - 타 Aggregate (Property·RoomType·Coupon) 는 ID 만 보관 (객체 참조 금지)
+ *  - couponId (Round 4): 예약에 적용된 쿠폰의 감사 추적용 ID. 미적용 예약은 null (CouponIssue 는 별도 Aggregate)
  *  - 스냅샷 4종 (propertyName·roomTypeName·price·cancellationPolicy) 을 예약 시점 값으로 보존 — 시점 일관성 (LLD §4.3)
- *  - totalPrice 단일 출처 = priceSnapshot.totalPrice() (Q3 확정: confirm 은 PriceSnapshot 수취)
+ *  - totalPrice 단일 출처 = priceSnapshot.totalPrice() (= finalPrice, Round 4 — 쿠폰 할인 후 최종 결제액)
  *  - status·confirmedAt·cancelledAt 의 변이는 상태 머신 메서드 경유만 — var + private set
  *  - cancel: CONFIRMED·CHECKED_IN 에서만 (isCancellable 재사용 — 가능 상태 집합의 단일 출처), 위반 시 CONFLICT.
  *    가드가 변이보다 먼저 (이중 취소 시 cancelledAt 보존). 통과 시 CANCELLED + CancellationResult 반환
- *  - refundAmount: cancellationPolicySnapshot 위임 — 조회 전용 (상태 비변경)
+ *  - refundAmount: cancellationPolicySnapshot 위임 — 조회 전용 (상태 비변경). totalPrice(=finalPrice) 기준 환불
  *  - checkIn: CONFIRMED → CHECKED_IN / checkOut: CHECKED_IN → CHECKED_OUT — 위반 시 CONFLICT, 상태 유지 (Q4)
  *
  * Refs:
- *  - docs/round-3/02-tdd-plan.md B.3 Reservation (RSV-01~19)
- *  - docs/round-3/03-questions.md Q3·Q4
- *  - ADR-002 (생성 = 즉시 CONFIRMED)
+ *  - docs/round-3/02-tdd-plan.md B.3 Reservation (RSV-01~19) / docs/round-4/02-tdd-plan.md B.3 (RSV2-07~11)
+ *  - docs/round-3/03-questions.md Q3·Q4 / ADR-002 (생성 = 즉시 CONFIRMED)
  *  - .claude/rules/08-static-factory-and-clock-injection.md, 18-domain-modeling.md
  */
 @Entity
@@ -46,6 +46,8 @@ class Reservation private constructor(
     val propertyId: Long,
     @Column(name = "room_type_id", nullable = false)
     val roomTypeId: Long,
+    @Column(name = "coupon_id")
+    val couponId: Long?,
     @Embedded
     val period: DateRange,
     @Embedded
@@ -122,6 +124,7 @@ class Reservation private constructor(
             userId: Long,
             property: Property,
             roomType: RoomType,
+            couponId: Long? = null,
             period: DateRange,
             guestInfo: GuestInfo,
             priceSnapshot: PriceSnapshot,
@@ -135,6 +138,7 @@ class Reservation private constructor(
                 userId = userId,
                 propertyId = property.id,
                 roomTypeId = roomType.id,
+                couponId = couponId,
                 period = period,
                 guestInfo = guestInfo,
                 priceSnapshot = priceSnapshot,

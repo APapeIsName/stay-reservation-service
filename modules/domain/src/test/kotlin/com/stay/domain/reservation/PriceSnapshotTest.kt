@@ -57,4 +57,65 @@ class PriceSnapshotTest {
             assertBadRequest { PriceSnapshot(emptyList()) }
         }
     }
+
+    @Nested
+    @DisplayName("할인 3분해 — Round 4 (of 팩토리)")
+    inner class Discount {
+
+        private val twoNights = listOf(
+            DailyPriceEntry(LocalDate.parse("2026-07-01"), 100000L),
+            DailyPriceEntry(LocalDate.parse("2026-07-02"), 200000L),
+        )
+
+        @DisplayName("RSV2-01: of(entries, 0) — 미적용 → before 300000 / discount 0 / final 300000")
+        @Test
+        fun noDiscount() {
+            val sut = PriceSnapshot.of(twoNights, 0L)
+            assertThat(sut.priceBeforeDiscount).isEqualTo(300000L)
+            assertThat(sut.discountAmount).isEqualTo(0L)
+            assertThat(sut.finalPrice).isEqualTo(300000L)
+            assertThat(sut.totalPrice()).isEqualTo(300000L)
+        }
+
+        @DisplayName("RSV2-02: of(entries, 50000) → final 250000 / totalPrice 250000")
+        @Test
+        fun withDiscount() {
+            val sut = PriceSnapshot.of(twoNights, 50000L)
+            assertThat(sut.priceBeforeDiscount).isEqualTo(300000L)
+            assertThat(sut.discountAmount).isEqualTo(50000L)
+            assertThat(sut.finalPrice).isEqualTo(250000L)
+            assertThat(sut.totalPrice()).isEqualTo(250000L)
+        }
+
+        @DisplayName("RSV2-03: 할인 == 주문액 (전액 할인) → final 0")
+        @Test
+        fun fullDiscount() {
+            val oneNight = listOf(DailyPriceEntry(LocalDate.parse("2026-07-01"), 100000L))
+            val sut = PriceSnapshot.of(oneNight, 100000L)
+            assertThat(sut.finalPrice).isEqualTo(0L)
+            assertThat(sut.priceBeforeDiscount).isEqualTo(100000L)
+            assertThat(sut.discountAmount).isEqualTo(100000L)
+        }
+
+        @DisplayName("RSV2-04: 할인 > 주문액 (방어적) → final 0 floor")
+        @Test
+        fun overDiscountFloorsToZero() {
+            val oneNight = listOf(DailyPriceEntry(LocalDate.parse("2026-07-01"), 100000L))
+            assertThat(PriceSnapshot.of(oneNight, 150000L).finalPrice).isEqualTo(0L)
+        }
+
+        @DisplayName("RSV2-05: of(emptyList(), 0) → BAD_REQUEST (빈 스냅샷)")
+        @Test
+        fun emptyRejected() {
+            assertBadRequest { PriceSnapshot.of(emptyList(), 0L) }
+        }
+
+        @DisplayName("RSV2-06: 기존 1-인자 생성자 회귀 — totalPrice() == 합산 (3분해가 기존 의미 불변)")
+        @Test
+        fun legacyConstructorRegression() {
+            val sut = PriceSnapshot(twoNights)
+            assertThat(sut.totalPrice()).isEqualTo(300000L)
+            assertThat(sut.discountAmount).isEqualTo(0L)
+        }
+    }
 }
