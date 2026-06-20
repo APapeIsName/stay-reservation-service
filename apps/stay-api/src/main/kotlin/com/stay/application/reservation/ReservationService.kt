@@ -74,7 +74,7 @@ class ReservationService(
         if (roomType.displayStatus == DisplayStatus.HIDDEN) {
             throw CoreException(ErrorType.BAD_REQUEST, "예약할 수 없는 객실 타입입니다.")
         }
-        val dailyRooms = dailyRoomRepository.findByRoomTypeAndDateBetween(
+        val dailyRooms = dailyRoomRepository.findForReserve(
             roomTypeId = roomType.id,
             from = period.checkIn,
             to = period.checkOut.minusDays(1),
@@ -116,7 +116,7 @@ class ReservationService(
             throw CoreException(ErrorType.FORBIDDEN, "본인의 예약만 취소할 수 있습니다.")
         }
         val result = reservation.cancel(LocalDateTime.now(clock))
-        val dailyRooms = dailyRoomRepository.findByRoomTypeAndDateBetween(
+        val dailyRooms = dailyRoomRepository.findForReserve(
             roomTypeId = reservation.roomTypeId,
             from = reservation.period.checkIn,
             to = reservation.period.checkOut.minusDays(1),
