@@ -19,6 +19,10 @@ class FakeCouponIssueRepository : CouponIssueRepository {
     val saved: List<CouponIssue>
         get() = store.values.toList()
 
+    fun seed(id: Long, couponIssue: CouponIssue) {
+        store[id] = couponIssue
+    }
+
     override fun save(couponIssue: CouponIssue): CouponIssue {
         val alreadyStored = store.values.any { it === couponIssue }
         if (!alreadyStored) {
@@ -26,6 +30,8 @@ class FakeCouponIssueRepository : CouponIssueRepository {
         }
         return couponIssue
     }
+
+    override fun findById(id: Long): CouponIssue? = store[id]
 
     override fun findByUserId(userId: Long): List<CouponIssue> = store.values.filter { it.userId == userId }
 }

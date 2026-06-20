@@ -1,9 +1,15 @@
 package com.stay.application.reservation
 
 import com.stay.application.support.DomainFixtures
+import com.stay.application.support.FakeCouponIssueRepository
+import com.stay.application.support.FakeCouponRepository
 import com.stay.application.support.FakeDailyRoomRepository
 import com.stay.application.support.FakePropertyRepository
 import com.stay.application.support.FakeReservationRepository
+import com.stay.domain.coupon.Coupon
+import com.stay.domain.coupon.CouponIssue
+import com.stay.domain.coupon.CouponIssueStatus
+import com.stay.domain.coupon.CouponType
 import com.stay.domain.dailyroom.StayAvailabilityService
 import com.stay.domain.property.CancellationPolicy
 import com.stay.domain.property.DisplayStatus
@@ -23,6 +29,7 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 /**
  * 카탈로그: docs/round-3/02-tdd-plan.md  B.5 ReservationService.reserve (RSVC-01~13)
@@ -36,10 +43,14 @@ class ReservationServiceTest {
     private val propertyRepository = FakePropertyRepository()
     private val dailyRoomRepository = FakeDailyRoomRepository()
     private val reservationRepository = FakeReservationRepository()
+    private val couponRepository = FakeCouponRepository()
+    private val couponIssueRepository = FakeCouponIssueRepository()
     private val sut = ReservationService(
         propertyRepository = propertyRepository,
         dailyRoomRepository = dailyRoomRepository,
         reservationRepository = reservationRepository,
+        couponRepository = couponRepository,
+        couponIssueRepository = couponIssueRepository,
         stayAvailabilityService = StayAvailabilityService(),
         clock = DomainFixtures.FIXED_CLOCK,
     )
@@ -62,6 +73,7 @@ class ReservationServiceTest {
         checkIn: String = "2026-06-20",
         checkOut: String = "2026-06-22",
         guestCount: Int = 2,
+        couponId: Long? = null,
     ) = ReserveCommand(
         propertyId = propertyId,
         roomTypeId = roomTypeId,
@@ -70,6 +82,7 @@ class ReservationServiceTest {
         guestCount = guestCount,
         guestName = "공명선",
         guestPhone = "010-1234-5678",
+        couponId = couponId,
     )
 
     private fun reservedOf(date: String): Int = dailyRoomRepository.find(20L, date)!!.reservedRooms
@@ -348,6 +361,173 @@ class ReservationServiceTest {
             val info = sut.cancel(1L, 100L)
             assertThat(info.status).isEqualTo(ReservationStatus.CANCELLED)
             assertThat(info.refundAmount).isEqualTo(0L)
+        }
+    }
+
+    @Nested
+    @DisplayName("쿠폰 적용 — Round 4 (couponId = 발급분 id)")
+    inner class CouponApply {
+
+        private val notExpired = LocalDateTime.parse("2026-12-31T23:59:00")
+
+        /** base 300000 픽스처 (6/20 100000 + 6/21 200000) */
+        private fun seed300k() = seedStandard(
+            firstDay = DomainFixtures.dailyRoom(20L, "2026-06-20", pricePerNight = 100000L),
+            secondDay = DomainFixtures.dailyRoom(20L, "2026-06-21", pricePerNight = 200000L),
+        )
+
+        private fun seedCoupon(
+            id: Long = 10L,
+            type: CouponType = CouponType.FIXED,
+            value: Long = 50000L,
+            minOrderAmount: Long? = null,
+            expiredAt: LocalDateTime = notExpired,
+        ) = couponRepository.seed(
+            id,
+            Coupon(name = "쿠폰", type = type, value = value, minOrderAmount = minOrderAmount, expiredAt = expiredAt),
+        )
+
+        private fun seedIssue(
+            id: Long = 77L,
+            couponId: Long = 10L,
+            userId: Long = 1L,
+            used: Boolean = false,
+        ): CouponIssue {
+            val issue = CouponIssue.issue(couponId, userId, DomainFixtures.NOW)
+            if (used) issue.markUsed(DomainFixtures.NOW, notExpired)
+            couponIssueRepository.seed(id, issue)
+            return issue
+        }
+
+        @DisplayName("RSV2-12: ReserveCommand 가 couponId 를 보유한다")
+        @Test
+        fun commandHoldsCouponId() {
+            assertThat(command(couponId = 77L).couponId).isEqualTo(77L)
+        }
+
+        @DisplayName("RSV2-13: couponId 생략 시 null")
+        @Test
+        fun commandCouponIdDefaultsNull() {
+            assertThat(command().couponId).isNull()
+        }
+
+        @DisplayName("RSVC2-01: FIXED 50000 적용 → totalPrice 250000 + 발급분 USED + 차감")
+        @Test
+        fun appliesFixed() {
+            seed300k()
+            seedCoupon(value = 50000L)
+            val issue = seedIssue()
+
+            val info = sut.reserve(1L, command(couponId = 77L))
+
+            assertThat(info.totalPrice).isEqualTo(250000L)
+            assertThat(issue.status).isEqualTo(CouponIssueStatus.USED)
+            assertThat(reservedOf("2026-06-20")).isEqualTo(1)
+        }
+
+        @DisplayName("RSVC2-02: couponId 미적용(null) → totalPrice 300000, 발급분 미사용")
+        @Test
+        fun noCoupon() {
+            seed300k()
+            val info = sut.reserve(1L, command(couponId = null))
+            assertThat(info.totalPrice).isEqualTo(300000L)
+            assertThat(couponIssueRepository.count).isEqualTo(0)
+        }
+
+        @DisplayName("RSVC2-03: 미존재 발급분 → NOT_FOUND, 예약 0")
+        @Test
+        fun unknownIssue() {
+            seed300k()
+            val thrown = assertThrows<CoreException> { sut.reserve(1L, command(couponId = 999L)) }
+            assertThat(thrown.errorType).isEqualTo(ErrorType.NOT_FOUND)
+            assertThat(reservationRepository.count).isEqualTo(0)
+        }
+
+        @DisplayName("RSVC2-04: 타 유저 발급분 → FORBIDDEN, 예약 0")
+        @Test
+        fun notOwner() {
+            seed300k()
+            seedCoupon()
+            seedIssue(userId = 2L)
+            val thrown = assertThrows<CoreException> { sut.reserve(1L, command(couponId = 77L)) }
+            assertThat(thrown.errorType).isEqualTo(ErrorType.FORBIDDEN)
+            assertThat(reservationRepository.count).isEqualTo(0)
+        }
+
+        @DisplayName("RSVC2-05: 이미 사용된 발급분 → CONFLICT, 예약 0")
+        @Test
+        fun alreadyUsed() {
+            seed300k()
+            seedCoupon()
+            seedIssue(used = true)
+            val thrown = assertThrows<CoreException> { sut.reserve(1L, command(couponId = 77L)) }
+            assertThat(thrown.errorType).isEqualTo(ErrorType.CONFLICT)
+            assertThat(reservationRepository.count).isEqualTo(0)
+        }
+
+        @DisplayName("RSVC2-06: 만료 쿠폰 → BAD_REQUEST, 예약 0")
+        @Test
+        fun expired() {
+            seed300k()
+            seedCoupon(expiredAt = LocalDateTime.parse("2026-06-09T23:59:00"))
+            seedIssue()
+            val thrown = assertThrows<CoreException> { sut.reserve(1L, command(couponId = 77L)) }
+            assertThat(thrown.errorType).isEqualTo(ErrorType.BAD_REQUEST)
+            assertThat(reservationRepository.count).isEqualTo(0)
+        }
+
+        @DisplayName("RSVC2-07: 최소금액 미달 → BAD_REQUEST, 예약 0")
+        @Test
+        fun minOrderNotMet() {
+            seed300k()
+            seedCoupon(minOrderAmount = 500000L)
+            seedIssue()
+            val thrown = assertThrows<CoreException> { sut.reserve(1L, command(couponId = 77L)) }
+            assertThat(thrown.errorType).isEqualTo(ErrorType.BAD_REQUEST)
+            assertThat(reservationRepository.count).isEqualTo(0)
+        }
+
+        @DisplayName("RSVC2-08: RATE 10% → totalPrice 270000, 스냅샷 discountAmount 30000")
+        @Test
+        fun appliesRate() {
+            seed300k()
+            seedCoupon(type = CouponType.RATE, value = 10L)
+            seedIssue()
+            val info = sut.reserve(1L, command(couponId = 77L))
+            assertThat(info.totalPrice).isEqualTo(270000L)
+            assertThat(reservationRepository.saved.single().priceSnapshot.discountAmount).isEqualTo(30000L)
+        }
+
+        @DisplayName("RSVC2-09: 할인액 > 주문액 → finalPrice 0 클램프, 정상 저장")
+        @Test
+        fun discountClampsToZero() {
+            seed300k()
+            seedCoupon(value = 500000L)
+            seedIssue()
+            val info = sut.reserve(1L, command(couponId = 77L))
+            assertThat(info.totalPrice).isEqualTo(0L)
+            assertThat(reservationRepository.count).isEqualTo(1)
+        }
+
+        @DisplayName("RSVC2-10: 재고 매진은 쿠폰보다 먼저 — CONFLICT + markUsed 미호출")
+        @Test
+        fun stockFailsBeforeCoupon() {
+            seedStandard(
+                firstDay = DomainFixtures.dailyRoom(20L, "2026-06-20", pricePerNight = 100000L),
+                secondDay = DomainFixtures.dailyRoom(
+                    20L,
+                    "2026-06-21",
+                    totalRooms = 5,
+                    reservedRooms = 5,
+                    pricePerNight = 200000L,
+                ),
+            )
+            seedCoupon()
+            val issue = seedIssue()
+            val thrown = assertThrows<CoreException> { sut.reserve(1L, command(couponId = 77L)) }
+            assertThat(thrown.errorType).isEqualTo(ErrorType.CONFLICT)
+            assertThat(issue.status).isEqualTo(CouponIssueStatus.AVAILABLE)
+            assertThat(reservationRepository.count).isEqualTo(0)
         }
     }
 }

@@ -1,11 +1,14 @@
 package com.stay.application.reservation
 
+import com.stay.domain.coupon.CouponIssueRepository
+import com.stay.domain.coupon.CouponRepository
 import com.stay.domain.dailyroom.DailyRoomRepository
 import com.stay.domain.dailyroom.StayAvailabilityService
 import com.stay.domain.property.DisplayStatus
 import com.stay.domain.property.PropertyRepository
 import com.stay.domain.reservation.DateRange
 import com.stay.domain.reservation.GuestInfo
+import com.stay.domain.reservation.PriceSnapshot
 import com.stay.domain.reservation.Reservation
 import com.stay.domain.reservation.ReservationRepository
 import com.stay.domain.user.Name
@@ -27,8 +30,11 @@ import java.time.LocalDateTime
  *  4. RoomType HIDDEN 이면 BAD_REQUEST — 예약 불가 노출 상태
  *  5. DailyRoom 조회 범위 checkIn ~ checkOut-1 — 체크아웃 당일 미차감
  *  6. validateAvailability — 기간 완전성·재고·휴실은 StayAvailabilityService 위임 (CONFLICT)
- *  7. quote → Reservation.confirm — 인원 가드가 차감보다 먼저 (스냅샷·Clock 시각 보존)
- *  8. consumeAll — 선검증 덕에 all-or-nothing 차감 → 저장 후 ReservationInfo 반환
+ *  7. quote (baseSnapshot) — 재고 선검증이 쿠폰보다 먼저 (매진 시 markUsed 미호출, RSVC2-10)
+ *  8. 쿠폰 적용 (couponId 있을 때) — 발급분 조회(NOT_FOUND)·소유(FORBIDDEN)·calculateDiscount(BAD_REQUEST)
+ *     ·markUsed(CONFLICT/BAD_REQUEST) → 할인 반영 PriceSnapshot. 미적용이면 baseSnapshot 그대로
+ *  9. Reservation.confirm — 인원 가드가 차감보다 먼저 (스냅샷·Clock 시각 보존)
+ * 10. consumeAll — 선검증 덕에 all-or-nothing 차감 → 저장 후 ReservationInfo 반환
  *
  * cancel 흐름 (소유 검증이 재고·상태 변동보다 먼저):
  *  1. Reservation 조회 → 미존재 NOT_FOUND
@@ -48,6 +54,8 @@ class ReservationService(
     private val propertyRepository: PropertyRepository,
     private val dailyRoomRepository: DailyRoomRepository,
     private val reservationRepository: ReservationRepository,
+    private val couponRepository: CouponRepository,
+    private val couponIssueRepository: CouponIssueRepository,
     private val stayAvailabilityService: StayAvailabilityService,
     private val clock: Clock,
 ) {
@@ -72,15 +80,29 @@ class ReservationService(
             to = period.checkOut.minusDays(1),
         )
         stayAvailabilityService.validateAvailability(period, dailyRooms)
-        val priceSnapshot = stayAvailabilityService.quote(period, dailyRooms)
+        val now = LocalDateTime.now(clock)
+        val baseSnapshot = stayAvailabilityService.quote(period, dailyRooms)
+        val priceSnapshot = command.couponId?.let { couponId ->
+            val issue = couponIssueRepository.findById(couponId)
+                ?: throw CoreException(ErrorType.NOT_FOUND, "쿠폰을 찾을 수 없습니다.")
+            if (!issue.belongsTo(userId)) {
+                throw CoreException(ErrorType.FORBIDDEN, "본인의 쿠폰만 사용할 수 있습니다.")
+            }
+            val coupon = couponRepository.findById(issue.couponId)
+                ?: throw CoreException(ErrorType.NOT_FOUND, "쿠폰을 찾을 수 없습니다.")
+            val discount = coupon.calculateDiscount(baseSnapshot.priceBeforeDiscount)
+            issue.markUsed(now, coupon.expiredAt)
+            PriceSnapshot.of(baseSnapshot.entries, discount)
+        } ?: baseSnapshot
         val reservation = Reservation.confirm(
             userId = userId,
             property = property,
             roomType = roomType,
+            couponId = command.couponId,
             period = period,
             guestInfo = guestInfo,
             priceSnapshot = priceSnapshot,
-            now = LocalDateTime.now(clock),
+            now = now,
         )
         stayAvailabilityService.consumeAll(period, dailyRooms)
         return ReservationInfo.from(reservationRepository.save(reservation))
