@@ -26,4 +26,9 @@ interface CouponIssueRepository {
      * 유저의 발급분 전체 조회 (발급순). 미발급 유저는 빈 목록.
      */
     fun findByUserId(userId: Long): List<CouponIssue>
+
+    /**
+     * 템플릿(couponId)의 발급분 페이지 단위 조회 (어드민 발급내역). 미발급 템플릿은 빈 목록.
+     */
+    fun findByCouponId(couponId: Long, page: Int, size: Int): List<CouponIssue>
 }

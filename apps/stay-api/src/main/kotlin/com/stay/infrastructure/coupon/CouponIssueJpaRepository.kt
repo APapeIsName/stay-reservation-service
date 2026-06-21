@@ -1,6 +1,7 @@
 package com.stay.infrastructure.coupon
 
 import com.stay.domain.coupon.CouponIssue
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 
 /**
@@ -10,4 +11,6 @@ import org.springframework.data.jpa.repository.JpaRepository
  */
 interface CouponIssueJpaRepository : JpaRepository<CouponIssue, Long> {
     fun findByUserId(userId: Long): List<CouponIssue>
+
+    fun findByCouponId(couponId: Long, pageable: Pageable): List<CouponIssue>
 }

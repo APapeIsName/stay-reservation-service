@@ -19,6 +19,8 @@ import kotlin.math.min
  *  - calculateDiscount: 할인 금액 계산. FIXED `min(value, pre)` / RATE `floor(pre × value / 100)`
  *  - minOrderAmount 미달(`pre < minOrderAmount`) 시 BAD_REQUEST — 경계 당값은 충족(>=)
  *  - 만료(expiredAt)로 인한 거절은 calculateDiscount 가 아니라 CouponIssue 책임 (금액 계산만 담당)
+ *  - update: 어드민 PUT 수정 — name·type·value·minOrderAmount·expiredAt 일괄 갱신 (Property.updateInfo 동형, Tell Don't Ask).
+ *    이미 발급된 분(CouponIssue)은 couponId 참조만 하므로 템플릿 갱신은 발급분 불변 — 시점 스냅샷이 필요하면 발급분 쪽 책임
  *  - 락 없음 — 읽기 위주·어드민 수정만 (@Version 없음, ADR-004)
  *
  * Refs:
@@ -28,24 +30,55 @@ import kotlin.math.min
 @Entity
 @Table(name = "coupon")
 class Coupon(
-    @Column(name = "name", nullable = false, length = 100)
-    val name: String,
-    @Enumerated(EnumType.STRING)
-    @Column(name = "type", nullable = false, length = 20)
-    val type: CouponType,
-    @Column(name = "value", nullable = false)
-    val value: Long,
-    @Column(name = "min_order_amount")
-    val minOrderAmount: Long?,
-    @Column(name = "expired_at", nullable = false)
-    val expiredAt: LocalDateTime,
+    name: String,
+    type: CouponType,
+    value: Long,
+    minOrderAmount: Long?,
+    expiredAt: LocalDateTime,
 ) : AuditedEntity() {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long = 0L
 
+    @Column(name = "name", nullable = false, length = 100)
+    var name: String = name
+        private set
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type", nullable = false, length = 20)
+    var type: CouponType = type
+        private set
+
+    @Column(name = "value", nullable = false)
+    var value: Long = value
+        private set
+
+    @Column(name = "min_order_amount")
+    var minOrderAmount: Long? = minOrderAmount
+        private set
+
+    @Column(name = "expired_at", nullable = false)
+    var expiredAt: LocalDateTime = expiredAt
+        private set
+
+    /** 어드민 수정 — 수정 가능 필드 전체를 일괄 갱신한다 (Property.updateInfo 동형). */
+    fun update(
+        name: String,
+        type: CouponType,
+        value: Long,
+        minOrderAmount: Long?,
+        expiredAt: LocalDateTime,
+    ) {
+        this.name = name
+        this.type = type
+        this.value = value
+        this.minOrderAmount = minOrderAmount
+        this.expiredAt = expiredAt
+    }
+
     fun calculateDiscount(preDiscountAmount: Long): Long {
+        val minOrderAmount = this.minOrderAmount
         if (minOrderAmount != null && preDiscountAmount < minOrderAmount) {
             throw CoreException(ErrorType.BAD_REQUEST, "최소 결제 금액을 충족하지 않습니다.")
         }

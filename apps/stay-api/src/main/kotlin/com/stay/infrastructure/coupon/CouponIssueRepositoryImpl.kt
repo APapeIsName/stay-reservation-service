@@ -2,6 +2,7 @@ package com.stay.infrastructure.coupon
 
 import com.stay.domain.coupon.CouponIssue
 import com.stay.domain.coupon.CouponIssueRepository
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Component
 
 /**
@@ -18,6 +19,9 @@ class CouponIssueRepositoryImpl(
 
     override fun findByUserId(userId: Long): List<CouponIssue> =
         jpaRepository.findByUserId(userId)
+
+    override fun findByCouponId(couponId: Long, page: Int, size: Int): List<CouponIssue> =
+        jpaRepository.findByCouponId(couponId, PageRequest.of(page, size))
 
     override fun findById(id: Long): CouponIssue? =
         jpaRepository.findById(id).orElse(null)

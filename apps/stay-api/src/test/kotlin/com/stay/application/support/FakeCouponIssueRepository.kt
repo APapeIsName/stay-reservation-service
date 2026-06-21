@@ -34,4 +34,7 @@ class FakeCouponIssueRepository : CouponIssueRepository {
     override fun findById(id: Long): CouponIssue? = store[id]
 
     override fun findByUserId(userId: Long): List<CouponIssue> = store.values.filter { it.userId == userId }
+
+    override fun findByCouponId(couponId: Long, page: Int, size: Int): List<CouponIssue> =
+        store.values.filter { it.couponId == couponId }.drop(page * size).take(size)
 }
