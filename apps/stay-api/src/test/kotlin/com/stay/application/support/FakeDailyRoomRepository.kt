@@ -21,4 +21,7 @@ class FakeDailyRoomRepository : DailyRoomRepository {
 
     override fun findByRoomTypeAndDateBetween(roomTypeId: Long, from: LocalDate, to: LocalDate): List<DailyRoom> =
         store.filter { it.roomTypeId == roomTypeId && !it.date.isBefore(from) && !it.date.isAfter(to) }
+
+    override fun findForReserve(roomTypeId: Long, from: LocalDate, to: LocalDate): List<DailyRoom> =
+        findByRoomTypeAndDateBetween(roomTypeId, from, to).sortedBy { it.date }
 }

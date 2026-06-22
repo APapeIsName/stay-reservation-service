@@ -8,6 +8,8 @@ import java.time.LocalDate
  *
  * 도메인 VO 가 아닌 raw 타입으로 보관 — 검증은 Service 가 생성하는 DateRange·GuestInfo
  * VO 생성자에서 수행 (rule 06 — 검증을 도메인 VO 로 일원화).
+ *
+ * couponId (Round 4): 적용할 쿠폰 발급분(CouponIssue)의 id. null 이면 쿠폰 미적용.
  */
 data class ReserveCommand(
     val propertyId: Long,
@@ -17,4 +19,5 @@ data class ReserveCommand(
     val guestCount: Int,
     val guestName: String,
     val guestPhone: String,
+    val couponId: Long? = null,
 )

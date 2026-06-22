@@ -16,4 +16,7 @@ class DailyRoomRepositoryImpl(
 
     override fun findByRoomTypeAndDateBetween(roomTypeId: Long, from: LocalDate, to: LocalDate): List<DailyRoom> =
         jpaRepository.findByIdRoomTypeIdAndIdDateBetween(roomTypeId, from, to)
+
+    override fun findForReserve(roomTypeId: Long, from: LocalDate, to: LocalDate): List<DailyRoom> =
+        jpaRepository.findForReserve(roomTypeId, from, to)
 }

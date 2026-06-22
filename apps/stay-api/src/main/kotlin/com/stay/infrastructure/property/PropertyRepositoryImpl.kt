@@ -22,4 +22,10 @@ class PropertyRepositoryImpl(
 
     override fun save(property: Property): Property =
         jpaRepository.save(property)
+
+    override fun incrementWishCount(id: Long) =
+        jpaRepository.incrementWishCount(id)
+
+    override fun decrementWishCount(id: Long) =
+        jpaRepository.decrementWishCount(id)
 }

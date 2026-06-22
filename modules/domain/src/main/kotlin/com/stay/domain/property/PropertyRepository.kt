@@ -28,4 +28,16 @@ interface PropertyRepository {
      * Property 영속. 저장된 Property 반환.
      */
     fun save(property: Property): Property
+
+    /**
+     * 찜 수 카운터 원자적 증가 — `UPDATE property SET wish_count = wish_count + 1 WHERE id = :id`.
+     * 상대 증가라 동시 찜의 lost update 를 원천 차단한다 (ADR-004 §3). 호출부의 존재 선검사 후 사용.
+     * 어댑터가 원자적 UPDATE 로 구현 — port 는 의도만 (DIP).
+     */
+    fun incrementWishCount(id: Long)
+
+    /**
+     * 찜 수 카운터 원자적 감소 — `... wish_count = wish_count - 1 WHERE id = :id AND wish_count > 0` (음수 방지).
+     */
+    fun decrementWishCount(id: Long)
 }

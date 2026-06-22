@@ -33,8 +33,9 @@
 | 3 | **DailyRoom Aggregate** | 클래스 (상세) | 단일 Entity (Q2 / ADR-003) |
 | 4 | **Reservation Aggregate** | 클래스 (상세) | 스냅샷 VO 묶음 (C3) |
 | 5 | Wishlist (단순 조인 엔티티) | 클래스 | C4 결정 |
-| 6 | Repository 포트 (`modules/domain`) | 인터페이스 | C2 결정 — `PropertyRepository` 단일 |
-| 7 | 공통 enum / VO | 정의 | City, Amenity, ReservationStatus 등 |
+| 6 | **Coupon Aggregate** | 클래스 (상세) | Coupon + CouponIssue 2 AR (Round 4 / ADR-004) |
+| 7 | Repository 포트 (`modules/domain`) | 인터페이스 | C2 결정 — `PropertyRepository` 단일 |
+| 8 | 공통 enum / VO | 정의 | City, Amenity, ReservationStatus 등 |
 
 ---
 
@@ -78,18 +79,36 @@ classDiagram
         (userId, propertyId) PK
     }
 
+    class Coupon {
+        <<Aggregate Root (R4)>>
+        Long id
+        --
+        템플릿 (어드민 CRUD)
+    }
+
+    class CouponIssue {
+        <<Aggregate Root (R4)>>
+        Long id
+        Long couponId
+        Long userId
+    }
+
     User "1" --> "*" Wishlist : userId
     Property "1" --> "*" Wishlist : propertyId 참조
     User "1" --> "*" Reservation : userId
     Property "1" --> "*" Reservation : propertyId 참조 (스냅샷)
     Property "1" --> "*" DailyRoom : roomTypeId 경유 (논리적)
     Reservation ..> DailyRoom : 차감 (직접 FK 없음, 카운터)
+    User "1" --> "*" CouponIssue : userId
+    Coupon "1" --> "*" CouponIssue : couponId 참조
+    Reservation ..> CouponIssue : 사용처리 (markUsed)
 ```
 
 ### 1.3 해석
 
-- **5개 Aggregate Root** (User 는 Round 1 완성) — 각자 독립 Repository
-- **Aggregate 간 참조는 모두 *ID*** — 화살표 라벨에 *"propertyId 참조"* 처럼 명시. Reservation 은 propertyId·roomTypeId·userId 만 보관, 객체 자체는 보관 X
+- **7개 Aggregate Root** (User 는 Round 1 완성, Coupon·CouponIssue 는 Round 4 추가) — 각자 독립 Repository
+- **Aggregate 간 참조는 모두 *ID*** — 화살표 라벨에 *"propertyId 참조"* 처럼 명시. Reservation 은 propertyId·roomTypeId·userId·couponId 만 보관, 객체 자체는 보관 X
+- **Coupon ─→ CouponIssue 도 ID 참조** — `CouponIssue.couponId` 만 보관. Coupon 템플릿과 CouponIssue (발급 1장) 가 *별도 Aggregate* (§ 6). Reservation 은 `couponId` 로 CouponIssue 를 *사용처리* (`markUsed`) 하되 직접 FK 없음
 - **Reservation ─..→ DailyRoom 점선** — *논리적 차감 관계* 이지만 직접 FK 없음. `daily_room.reserved_rooms` 카운터로만 표현 (ADR-003 의 trade-off)
 - **Property → DailyRoom 도 점선** — Property 가 DailyRoom 을 *소유* 하지 않음. 둘 다 독립 Aggregate. 연결은 `room_type_id` 만
 
@@ -321,6 +340,7 @@ classDiagram
         +Long userId
         +Long propertyId
         +Long roomTypeId
+        +Long? couponId
         +DateRange period
         +GuestInfo guestInfo
         +Long totalPrice
@@ -343,7 +363,7 @@ classDiagram
 
     class ReservationFactory {
         <<companion object>>
-        +confirm(userId, property, roomType, period, guestInfo, priceSnapshot, now) Reservation
+        +confirm(userId, property, roomType, couponId, period, guestInfo, priceSnapshot, now) Reservation
     }
 
     class DateRange {
@@ -365,6 +385,9 @@ classDiagram
     class PriceSnapshot {
         <<VO>>
         +List~DailyPriceEntry~ entries
+        +Long priceBeforeDiscount
+        +Long discountAmount
+        +Long finalPrice
         --
         +totalPrice() Long
     }
@@ -397,6 +420,8 @@ classDiagram
 - **`CancellationPolicy` vs `CancellationPolicySnapshot` 별도 타입** — Round 1 Q6 의 RawPassword/Password 분리 교훈 답습. *현재 정책* 과 *예약 시점 스냅샷* 의 라이프사이클이 달라 *타입으로 구분*. `Property.cancellationPolicy.snapshot()` 으로 변환
 - **상태 머신 가드는 메서드 안** — `cancel()` 이 `status in (CONFIRMED, CHECKED_IN)` 검증, `CHECKED_OUT/CANCELLED` 면 throw. `02-sequence-diagrams.md § 4` 상태도의 *컴파일 가능한 표현*
 - **`belongsTo(userId)` 권한 검증** — Service 가 `reservation.userId == userId` 비교 대신 `reservation.belongsTo(userId)` 위임. *도메인 의도* 명시
+- **`couponId: Long?` 필드 (Round 4)** — 예약에 사용된 쿠폰의 *감사 추적* 용. NULLABLE — 미적용 예약은 null. CouponIssue 는 *별도 Aggregate* 이므로 ID 참조만 보관 (§ 6)
+- **`PriceSnapshot` 3금액 분해 (Round 4)** — 기존 `entries: List<DailyPriceEntry>` 유지하면서 ① `priceBeforeDiscount` (= Σ entries.pricePerNight, 할인 전) ② `discountAmount` ③ `finalPrice` (= priceBeforeDiscount − discountAmount, 0 floor — 최종 결제액) 3필드 추가. `Reservation.totalPrice` 는 *finalPrice* (최종 결제액) 로 의미 명확화 — 쿠폰 도입 전 "할인 전 합산"과 구별
 
 ### 4.4 핵심 메서드 시그니처
 
@@ -406,9 +431,10 @@ class Reservation private constructor(
     val userId: Long,
     val propertyId: Long,
     val roomTypeId: Long,
+    val couponId: Long?,                  // Round 4 — 적용 쿠폰 감사 추적 (미적용 시 null)
     val period: DateRange,
     val guestInfo: GuestInfo,
-    val totalPrice: Long,
+    val totalPrice: Long,                 // = priceSnapshot.finalPrice (최종 결제액)
     val priceSnapshot: PriceSnapshot,
     val cancellationPolicySnapshot: CancellationPolicySnapshot,
     val propertyNameSnapshot: String,
@@ -421,10 +447,12 @@ class Reservation private constructor(
     companion object {
         // Round 3 정정 (Q3): dailyRooms 대신 PriceSnapshot 수취 — 타 Aggregate 객체 의존 제거.
         // 견적 생성은 StayAvailabilityService.quote 책임 (§ 3.5)
+        // Round 4: couponId 수취 (미적용 시 null). 할인 계산은 Coupon.calculateDiscount → PriceSnapshot 3분해 책임 (§ 6.5)
         fun confirm(
             userId: Long,
             property: Property,
             roomType: RoomType,
+            couponId: Long?,
             period: DateRange,
             guestInfo: GuestInfo,
             priceSnapshot: PriceSnapshot,
@@ -441,9 +469,10 @@ class Reservation private constructor(
                 userId = userId,
                 propertyId = property.id,
                 roomTypeId = roomType.id,
+                couponId = couponId,
                 period = period,
                 guestInfo = guestInfo,
-                totalPrice = priceSnapshot.totalPrice(),
+                totalPrice = priceSnapshot.finalPrice,  // 최종 결제액 (할인 반영)
                 priceSnapshot = priceSnapshot,
                 cancellationPolicySnapshot = property.cancellationPolicy.snapshot(),
                 propertyNameSnapshot = property.name,
@@ -516,11 +545,147 @@ classDiagram
 
 ---
 
-## 6. Repository 포트 (`modules/domain`)
+## 6. Coupon Aggregate (Round 4)
+
+### 6.1 이유
+
+- 어드민이 *쿠폰 템플릿* (`Coupon`) 을 CRUD 로 관리하고, 유저가 그것을 *발급* (`CouponIssue`) 받아 예약 시 사용 — 두 개념의 *라이프사이클·변경 빈도·동시성 요구* 가 극단적으로 다름
+- **Coupon (템플릿)** 은 읽기 위주 (발급·계산 시 조회) + 어드민 수정만 → 락 불필요
+- **CouponIssue (발급 1장)** 는 예약 시 *중복 사용 방지* 가 핵심 → **낙관락 (@Version)** 필요 (Q2 / ADR-004)
+- → `Property`(AR) 가 `RoomType`(내부 Entity) 를 *중첩* 한 § 2 와 **대조** — 여기는 *2개의 독립 Aggregate Root*. composition (`*--`) 이 아니라 **ID 참조 (점선 의존)**
+
+### 6.2 다이어그램
+
+```mermaid
+classDiagram
+    class Coupon {
+        <<Aggregate Root>>
+        +Long id
+        +String name
+        +CouponType type
+        +Long value
+        +Long? minOrderAmount
+        +LocalDateTime expiredAt
+        +LocalDateTime createdAt
+        +LocalDateTime updatedAt
+        --
+        +calculateDiscount(preDiscountAmount) Long
+    }
+
+    class CouponIssue {
+        <<Aggregate Root>>
+        +Long id
+        +Long couponId
+        +Long userId
+        +CouponIssueStatus status
+        +LocalDateTime issuedAt
+        +LocalDateTime? usedAt
+        +Long version
+        --
+        +belongsTo(userId) Boolean
+        +markUsed(now)
+        +isUsable(now, expiredAt) Boolean
+    }
+
+    class CouponType {
+        <<enum>>
+        FIXED
+        RATE
+    }
+
+    class CouponIssueStatus {
+        <<enum>>
+        AVAILABLE
+        USED
+    }
+
+    Coupon ..> CouponType : type
+    CouponIssue ..> CouponIssueStatus : status
+    CouponIssue ..> Coupon : couponId (ID 참조)
+```
+
+### 6.3 해석
+
+- **2개의 독립 Aggregate Root** — `Coupon` (템플릿) ↔ `CouponIssue` (발급 1장). § 2 의 `Property *-- RoomType` (composition) 과 정반대 — *발급 후 라이프사이클이 템플릿과 분리* 되므로 묶지 않음. `CouponIssue.couponId` *ID 참조만* (객체 참조 금지, 점선 `..>`)
+- **`Coupon.calculateDiscount(preDiscountAmount)`** — 할인액 계산의 단일 소유자. `minOrderAmount` 미달 → `CoreException` (사용 불가). `FIXED` → `min(value, preDiscountAmount)`. `RATE` → `floor(preDiscountAmount * value / 100)` (끝전 내림)
+- **`CouponType { FIXED(정액), RATE(정률) }`** — `value` 의 의미가 type 에 따라 달라짐 (FIXED=할인 원, RATE=퍼센트 정수)
+- **`CouponIssueStatus { AVAILABLE, USED }` — 저장 값은 2개뿐** — `EXPIRED` 는 *저장하지 않음*. 조회·사용 시 `(now > coupon.expiredAt)` 로 **파생** 판정 (만료 배치 없음). 응답에서만 AVAILABLE/USED/EXPIRED 3종으로 노출
+- **`markUsed(now)` — AVAILABLE 가드** — 이미 USED 면 `CoreException(CONFLICT)`. 중복 사용을 *도메인 메서드 안* 에서 차단 (Tell, Don't Ask)
+- **락은 `CouponIssue` 에만 — 낙관락 (@Version `version` 컬럼)** — 동시 예약이 같은 발급 쿠폰을 사용하려는 경합을 막음 (ADR-004). `Coupon` 템플릿은 `@Version` *없음* (읽기 위주 + 어드민 수정만)
+- **`belongsTo(userId)`** — 예약 시 *내 쿠폰인지* 검증. § 4 `Reservation.belongsTo` 와 동일한 *도메인 의도 위임* 패턴
+
+### 6.4 핵심 메서드 시그니처
+
+```kotlin
+class Coupon(
+    val id: Long,
+    val name: String,
+    val type: CouponType,
+    val value: Long,
+    val minOrderAmount: Long?,
+    val expiredAt: LocalDateTime,
+) {
+    // minOrderAmount 미달 → 사용 불가. FIXED=min(value, 결제전), RATE=floor(결제전 * value / 100)
+    fun calculateDiscount(preDiscountAmount: Long): Long {
+        if (minOrderAmount != null && preDiscountAmount < minOrderAmount) {
+            throw CoreException(ErrorType.BAD_REQUEST, "최소 결제금액 조건을 충족하지 않습니다.")
+        }
+        return when (type) {
+            CouponType.FIXED -> minOf(value, preDiscountAmount)
+            CouponType.RATE -> preDiscountAmount * value / 100  // 끝전 내림
+        }
+    }
+}
+
+class CouponIssue(
+    val id: Long,
+    val couponId: Long,
+    val userId: Long,
+    var status: CouponIssueStatus,
+    val issuedAt: LocalDateTime,
+    var usedAt: LocalDateTime?,
+    @Version val version: Long = 0L,  // 낙관락 — coupon_issue 에만
+) {
+    fun belongsTo(userId: Long): Boolean = this.userId == userId
+
+    fun markUsed(now: LocalDateTime) {
+        if (status != CouponIssueStatus.AVAILABLE) {
+            throw CoreException(ErrorType.CONFLICT, "이미 사용한 쿠폰입니다.")
+        }
+        status = CouponIssueStatus.USED
+        usedAt = now
+    }
+
+    // EXPIRED 는 저장 안 함 — (now > expiredAt) 로 파생 판정
+    fun isUsable(now: LocalDateTime, expiredAt: LocalDateTime): Boolean =
+        status == CouponIssueStatus.AVAILABLE && now <= expiredAt
+}
+```
+
+### 6.5 예약 흐름과의 연결 (1 트랜잭션)
+
+`reserve()` 한 트랜잭션 안에서:
+
+```
+재고 비관락 조회·검증 (findForReserve, ORDER BY date ASC — 데드락 회피)
+  → CouponIssue 조회 · belongsTo · markUsed (낙관락 @Version)
+  → Coupon.calculateDiscount(priceBeforeDiscount)
+  → PriceSnapshot 3분해 (priceBeforeDiscount / discountAmount / finalPrice)
+  → Reservation.confirm(...) (couponId 보관)
+  → 재고 차감 (consumeOne)
+  → save
+```
+
+- **락 정본 (ADR-004 — 혼동 금지)**: `daily_room` 은 **비관락** (`@Version` 없음), `coupon_issue` 는 **낙관락** (`@Version version`). 두 락이 *서로 다른 Aggregate* 에 붙음
+- 쿠폰 미적용 예약 (`couponId == null`) 은 CouponIssue 단계를 건너뜀 — `discountAmount = 0`, `finalPrice = priceBeforeDiscount`
+
+---
+
+## 7. Repository 포트 (`modules/domain`)
 
 C2 결정 — CQRS 도입 X. 각 Aggregate 당 Repository 1개.
 
-### 6.1 다이어그램
+### 7.1 다이어그램
 
 ```mermaid
 classDiagram
@@ -557,20 +722,37 @@ classDiagram
         +deleteByUserIdAndPropertyId(userId, propertyId)
         +findByUserId(userId, page) Page~Wishlist~
     }
+
+    class CouponRepository {
+        <<interface>>
+        +findById(id) Coupon?
+        +findAll(page) Page~Coupon~
+        +save(coupon) Coupon
+        +delete(coupon)
+    }
+
+    class CouponIssueRepository {
+        <<interface>>
+        +findById(id) CouponIssue?
+        +findByUserId(userId, page) Page~CouponIssue~
+        +findByCouponId(couponId, page) Page~CouponIssue~
+        +save(couponIssue) CouponIssue
+    }
 ```
 
-### 6.2 해석
+### 7.2 해석
 
 - **모두 `interface`** — `modules/domain` 의 *포트*. 구현체 (`*Impl`) 는 `apps/stay-api/infrastructure/` 에 (Hexagonal/Ports & Adapters)
 - **`PropertyRepository.findByRoomTypeId`** — C2 의 핵심. 어드민 RoomType 단건 조회 시 *Property aggregate 경유* 라는 일관성 유지하면서도 *효율적 진입점* 제공
 - **`DailyRoomRepository.upsertRanges`** — 어드민 `PUT /rooms/{id}/inventory` 의 `{ranges: [...]}` 처리. *일자별로 펼침* 책임은 *Service* 또는 *Repository 메서드 안*. 잠정: Service 책임 (펼친 List<DailyRoom> 만들어 `saveAll`)
 - **`User`, `Reservation` 의 *조회* 권한 검증은 Service 책임** — `belongsTo` 메서드는 도메인에 있지만, *권한 위반 → 403* 변환은 Service/Controller 계층
+- **`CouponRepository` / `CouponIssueRepository` 분리 (Round 4)** — 2개의 독립 Aggregate Root 이므로 각자 Repository (§ 6). `CouponIssueRepository.findByCouponId` 는 어드민 *발급 내역 조회* (`GET /api-admin/v1/coupons/{couponId}/issues`, 페이지네이션) 의 진입점. `findByUserId` 는 고객 *내 쿠폰* (`GET /api/v1/users/me/coupons`) 진입점
 
 ---
 
-## 7. 공통 enum / VO
+## 8. 공통 enum / VO
 
-### 7.1 enum
+### 8.1 enum
 
 ```kotlin
 enum class City(val code: String) {
@@ -599,9 +781,14 @@ enum class ReservationStatus {
 enum class SortType {
     RECOMMENDED, PRICE_ASC, RATING_DESC, WISHES_DESC,
 }
+
+// Round 4 — Coupon
+enum class CouponType { FIXED, RATE }            // FIXED=정액(할인 원), RATE=정률(퍼센트 정수)
+
+enum class CouponIssueStatus { AVAILABLE, USED } // 저장 값은 2개뿐 — EXPIRED 는 (now > coupon.expiredAt) 파생 판정
 ```
 
-### 7.2 결과 VO
+### 8.2 결과 VO
 
 ```kotlin
 data class CancellationResult(
@@ -622,7 +809,7 @@ data class SearchCriteria(
 
 ---
 
-## 8. 의존 방향 정리
+## 9. 의존 방향 정리
 
 빅테크 모범 + Hexagonal 정합:
 
@@ -642,15 +829,15 @@ data class SearchCriteria(
 
 ---
 
-## 9. 클래스 다이어그램 모범 사례 vs 우리 적용
+## 10. 클래스 다이어그램 모범 사례 vs 우리 적용
 
 빅테크 시퀀스 다이어그램 리서치 (`docs/round-2/04-bigtech-sequence-diagrams-research.md`) 의 모범 사례 중 클래스에 적용 가능한 것:
 
 | 모범 사례 | 우리 적용 |
 |---|---|
-| 한 다이어그램 = 한 Aggregate | ✅ § 2, § 3, § 4 각각 별도 |
-| 5\~10 클래스 제한 | ✅ Property 7, DailyRoom 2, Reservation 7 |
-| VO vs Entity 시각 구분 | ✅ `<<VO>>`, `<<Entity>>`, `<<Aggregate Root>>` stereotype |
+| 한 다이어그램 = 한 Aggregate | ✅ § 2, § 3, § 4, § 6 각각 별도 (Coupon 은 2 AR 이지만 ID 참조로 한 도메인 묶음) |
+| 5\~10 클래스 제한 | ✅ Property 7, DailyRoom 2, Reservation 7, Coupon 4 (2 AR + 2 enum) |
+| VO vs Entity 시각 구분 | ✅ `<<VO>>`, `<<Entity>>`, `<<Aggregate Root>>`, `<<enum>>` stereotype |
 | 메서드는 핵심만 (getter/setter 생략) | ✅ |
 | 의존 방향 명시 | ✅ composition `*--`, ID 참조는 `..>` |
 | 앞 이유 / 뒤 해석 | ✅ arc42 § 6 구조 |
@@ -666,6 +853,7 @@ data class SearchCriteria(
 | 2026-05-30 | 첫 작성 (Round 2) | LLD 본체 — 4 Aggregate (Property/DailyRoom/Reservation/Wishlist) + Repository 포트 + 공통 enum/VO. C1\~C5 결정 (`docs/round-2/03-questions.md` Q5\~Q9 — 2026-05-31 누적 완료) 반영 |
 | 2026-05-30 | § 4.4 `Reservation.confirm()` 의 `require { }` → `if (!조건) throw CoreException(...)` 컨벤션 일치 | 검수 중 Round 1 의 `Password.kt` 패턴과 불일치 발견. Round 1 questions.md Q9 (Java-스러운 if-throw 체이닝, Kotlin best practice 모색 후 일괄 적용) 의 *현재 잠정 컨벤션* 따름 |
 | 2026-06-11 | Round 3 구현 반영 정정 — ① `confirm` 시그니처 `dailyRooms` → `priceSnapshot` 수취 (§ 4.2 다이어그램·§ 4.4 코드 — 기존 § 4.2/§ 4.4 간 불일치도 함께 해소) ② § 3.5 `StayAvailabilityService` 신설 ③ `checkIn()/checkOut()` 전이 메서드 추가 | 구현 결정 Q3 (SAS 확장 도입 — 타 Aggregate 객체 의존 제거)·Q4 (전이 메서드). 발견 경위는 `docs/round-3/02-tdd-plan.md` D-B2 |
+| 2026-06-16 | Round 4 Coupon 도메인 증강 — ① § 6 **Coupon Aggregate** 신설 (Coupon + CouponIssue 2 AR, CouponType·CouponIssueStatus enum, ID 참조 점선) ② § 1 도메인 지도에 Coupon·CouponIssue 추가 (7 AR) ③ § 4 Reservation 에 `couponId: Long?` + PriceSnapshot 3분해 (priceBeforeDiscount/discountAmount/finalPrice) ④ § 7 Repository 에 CouponRepository·CouponIssueRepository ⑤ § 8 enum 에 CouponType·CouponIssueStatus. 기존 § 6\~9 → § 7\~10 재번호 | Round 4 결정 (ADR-004 — 락 정본: daily_room 비관락 / coupon_issue 낙관락 @Version). EXPIRED 는 저장 안 함 (파생 판정). `totalPrice = finalPrice` 의미 명확화 |
 
 ---
 
