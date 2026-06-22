@@ -1,10 +1,18 @@
 ## 📌 Summary
 
-- **배경**: Round 4 발제 — 예약 시 일자별 재고 / 쿠폰 / 결제 금액의 정합성을 트랜잭션으로 보장하고 **더블부킹 등 동시성 이슈를 제어**. 정액/정률 쿠폰 도메인 신설 후 예약에 할인 적용.
-- **목표**: ① **"동시 요청들에게 무엇이 일어나야 하는가"** 를 기준으로 한 **구간별 차등 락** (단일 락 통일 X) ② 쿠폰 2 Aggregate + 예약 적용 (단일 트랜잭션 정합) ③ 대고객·어드민 API + 인증 게이트
-- **결과**: 도메인 L1/L2 **229건** + apps L1/L2 **86건** 통과 (실패 0). 동시성 L3 (CC-01/08/09) + E2E L4 작성 (Docker 차단). **ADR-004 신설** + 카탈로그 84건.
+> **TL;DR** — 예약 동시성을 단일 락으로 통일하지 않고 **구간별 차등 전략**(재고=비관락 / 쿠폰=낙관락 / 찜=원자증가)으로 제어. 쿠폰 2 Aggregate 신설 + 예약 단일 트랜잭션 적용. 도메인·apps L1/L2 **315건 통과**.
+>
+> **🔎 리뷰 포인트 (여기를 집중해 봐주세요)**
+> 1. 다일자 락 획득 순서(날짜 ASC)가 `reserve`·`cancel` 에서 일치하는가 — 데드락 회피의 핵심 (`DailyRoomJpaRepository.findForReserve`)
+> 2. `CouponIssue.markUsed` 가드 순서(이미사용 → 만료 → 전이)의 정확성
+> 3. `ReservationService.reserve` 에서 **재고 검증이 `markUsed` 보다 앞서는** 트랜잭션 순서 (매진 시 쿠폰 미사용 — RSVC2-10)
+> 4. 찜 `wish_count` 원자 UPDATE 가 도메인 메서드를 대체한 트레이드오프(도메인 순수성 희생)의 타당성
+>
+> **📏 리뷰 범위** — 선행 PR #1/#2/#3 미머지라 diff 에 누적 포함됨. **round-4 고유 변경은 `b6a3a39..` 15 커밋**(아래 커밋표).
 
-> 선행 PR #1/#2/#3 미머지 상태라 본 PR diff 에 해당 커밋 포함 (base=main 동일 패턴). **round-4 고유 변경은 `b6a3a39..` 15 커밋.**
+- **배경**: Round 4 발제 — 예약 시 일자별 재고 / 쿠폰 / 결제 금액의 정합성을 트랜잭션으로 보장하고 **더블부킹 등 동시성 이슈를 제어**. 정액/정률 쿠폰 도메인을 신설해 예약에 할인을 적용함.
+- **목표**: ① **"동시 요청들에게 무엇이 일어나야 하는가"** 를 기준으로 한 **구간별 차등 락**(단일 락 통일 X) ② 쿠폰 2 Aggregate + 예약 적용(단일 트랜잭션 정합) ③ 대고객·어드민 API + 인증 게이트
+- **결과**: 도메인 L1/L2 **229건** + apps L1/L2 **86건** 통과(실패 0). 동시성 L3(CC-01/08/09) + E2E L4 작성(Docker 차단). **ADR-004 신설** + 카탈로그 84건.
 
 ## 🧭 Context & Decision
 
@@ -81,7 +89,7 @@
 
 | 구간 | 구현 (port → adapter) | 테스트 |
 |---|---|---|
-| 재고 비관락 | `findForReserve` → `@Lock(PESSIMISTIC_WRITE)` + JPQL `ORDER BY date ASC` (예약/취소만, 읽기 경로 비잠금) | CC-01 (10스레드 → 1건만) |
+| 재고 비관락 | `findForReserve` → `@Lock(PESSIMISTIC_WRITE)` + JPQL `ORDER BY date ASC` (예약/취소만 잠그고, 검색·상세 읽기 경로는 잠그지 않음) | CC-01 (10스레드 → 1건만) |
 | 쿠폰 낙관락 | `CouponIssue.@Version` → JPA dirty checking 충돌 → `OptimisticLockException` | CC-08 (동시 사용 → 1회 USED) |
 | 찜 원자증가 | `incrementWishCount` → `@Modifying UPDATE wish_count = wish_count + 1` | CC-09 (10명 찜 → 정확히 10) |
 
@@ -145,7 +153,7 @@ flowchart LR
     E --> H["lost update 없이 정확히 N"]
 ```
 
-## 검증 상태
+## ✅ 검증 상태
 
 ### 테스트 — 4등급 분리 실행 (rule 17 `-DtestTag`)
 
@@ -165,7 +173,7 @@ flowchart LR
 
 ### 인증
 
-- `LdapAuthInterceptor` — `/api-admin/**` 진입 전 `X-Stay-Ldap` 헤더 존재 검증, 없으면 `CoreException(UNAUTHORIZED)` → advice 가 401 매핑. 실 LDAP 연동은 미도입(스텁 — Round 4 핵심에서 벗어나 과투자).
+- `LdapAuthInterceptor` 가 `/api-admin/**` 진입 전 `X-Stay-Ldap` 헤더를 검증하고, 없으면 `CoreException(UNAUTHORIZED)` 을 던져 advice 가 401 로 매핑함. 실 LDAP 연동은 이번 라운드 핵심(동시성) 밖이라 헤더 스텁으로 대체함.
 
 ---
 
